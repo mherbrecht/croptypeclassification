@@ -1,0 +1,542 @@
+//Crop type classification using db-time series
+
+var smoothradius;
+var geometry;
+var year;
+var studyarea;
+var smoothset;
+
+
+//-----------------Year--------------
+
+var yearlabel = ui.Label('For which year would you like to classify crop types?');
+print(yearlabel);
+
+//Textbox for year
+var yearbox = ui.Textbox({
+  placeholder: 'Type in year',
+  onChange: function(text) {
+    year = text;
+  }
+});
+print(yearbox);    
+
+  
+// -------------- UG ------------  
+
+
+// Button for UG
+var buttonUGlabel = ui.Label('Would you to use an area of interest different from the TR32 study area?\n\n (Results not tested for any area different from the TR32 study area!)');    //text
+    print(buttonUGlabel);
+var buttonUGYes = ui.Button('Yes');   //creation of Yes-Button
+  buttonUGYes.onClick(function() {     //What happens when you click Yes 
+  studyarea = 'your choosen study area.';
+var uglabel = ui.Label('Set the path to the asset of your study area:');    //text
+    print(uglabel);
+var ugbox = ui.Textbox({
+  placeholder: 'Type in the path of your asset',
+  onChange: function(text) {
+    text = ee.String(text);
+    geometry = text;
+  }
+});
+print(ugbox);   
+    });
+  print(buttonUGYes);
+  
+  
+var buttonUGNo = ui  .Button('No');                 
+  buttonUGNo.onClick(function() {
+    studyarea = 'the study area of the TR32.';
+    geometry = 'users/M005E/UG_TR32';
+    });
+  print(buttonUGNo);
+
+
+
+
+// -------------- Smoothing ------------ 
+
+var smoothinglabel = ui.Label('Would you like to smooth the data before classification?\n\n(Only recommended if you are using a crop mask as study area)');
+print(smoothinglabel);
+
+// Button for Smoothing
+var buttonSmoothYes = ui.Button('Yes');   //creation of Yes-Button
+  buttonSmoothYes.onClick(function() {     //What happens when you click Yes 
+
+    var smoothradiuslabel = ui.Label('Type a smoothing pixel radius:');    //text
+    print(smoothradiuslabel);
+var smoothbox = ui.Textbox({
+  placeholder: 'Smoothing radius',
+  onChange: function(text) {
+    smoothset = 'The smoothing radius was set to ' + text;
+    text = ee.Number.parse(text);
+    smoothradius = text;
+  }
+});
+print(smoothbox);    
+    });
+  print(buttonSmoothYes);
+
+var buttonSmoothNo = ui  .Button('No');                 
+  buttonSmoothNo.onClick(function() {
+    smoothradius = 0;
+    smoothset = 'No smoothing radius was set.';
+    });
+  print(buttonSmoothNo);
+  
+
+//--------------Start-----------------------
+
+var buttonStart = ui  .Button('Start Classification');                 
+  buttonStart.onClick(function() {
+      
+var throwbackgeometry = 'Please set a study area';   
+      
+if (geometry === undefined){
+  print(throwbackgeometry)}
+  
+var throwbacksmooth = 'Please choose if you like to smooth the data ';   
+      
+if (smoothradius === undefined){
+  print(throwbacksmooth)}  
+  
+if (geometry !== undefined && smoothradius !== undefined){
+    
+    
+print('smoothradius:', smoothradius);
+print('geometry:',geometry);    
+
+
+//-------------------------------Functions & Predefenitions------------------------------
+
+// Definition of boxcar kernel for smoothing
+var boxcar = ee.Kernel.square({
+  radius: smoothradius, units: 'pixels', normalize: true
+});
+
+
+//Function for visualisation of shapes
+{
+var drawShape = function(importshape) {
+  var empty = ee.Image().byte();
+  var outline = empty.paint({
+    featureCollection: importshape,
+    color: 1,
+    width: 3
+  });
+  return outline;
+};
+}
+
+//Reclassify function
+var reclassify = function(image, replacement){
+  var classifiedImage = image.remap([1,0],
+                                    [replacement, 0]);
+  return classifiedImage;
+};
+
+
+
+//-----------------------------Data------------------------------------------
+
+//Import shapefile for the area of interest
+
+var ug = ee.FeatureCollection(geometry);
+print('ug:', ug);
+
+
+
+
+
+
+//Import of Sentinel-1-data
+
+//Load S1 Timeseries
+var sentinel1 = ee.ImageCollection('COPERNICUS/S1_GRD');
+
+//load scence in VH & VV, IW-Mode
+var relevantscenes = sentinel1
+  .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH'))
+  .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+  .filter(ee.Filter.eq('instrumentMode', 'IW'))
+  .filterBounds(ug);
+
+var relevantscenesVH = relevantscenes
+  .select('VH');
+var relevantscenesVV = relevantscenes
+  .select('VV');
+
+var starttime = year + '-01-01';
+
+var gesamtVH = relevantscenesVH 
+  .filterDate(year + '-01-01',year + '-12-31'); 
+var gesamtVHMean = gesamtVH.mean();  
+
+
+
+// Scenes in time slots 
+
+var VH_04_2= relevantscenesVH
+  .filterDate(year + '-04-11',year + '-04-20'); 
+var VH_04_3= relevantscenesVH
+  .filterDate(year + '-04-21',year + '-04-30');
+var VH_06_1= relevantscenesVH
+  .filterDate(year + '-06-01',year + '-06-10');  
+var VH_06_2= relevantscenesVH
+  .filterDate(year + '-06-11',year + '-06-20');
+var VH_07_1= relevantscenesVH
+  .filterDate(year + '-07-01',year + '-07-10');  
+var VH_07_3= relevantscenesVH
+  .filterDate(year + '-07-21',year + '-07-31');
+var VH_08_1= relevantscenesVH
+  .filterDate(year + '-08-01',year + '-08-10');  
+var VH_09_3= relevantscenesVH
+  .filterDate(year + '-09-21',year + '-09-30');   
+
+  
+var VV_04_1= relevantscenesVV
+  .filterDate(year + '-04-01',year + '-04-10');  
+var VV_04_2= relevantscenesVV
+  .filterDate(year + '-04-11',year + '-04-20'); 
+var VV_04_3= relevantscenesVV
+  .filterDate(year + '-04-21',year + '-04-30');
+var VV_05_1= relevantscenesVV
+  .filterDate(year + '-05-01',year + '-05-10');   
+var VV_05_2= relevantscenesVV
+  .filterDate(year + '-05-11',year + '-05-20');
+var VV_06_1= relevantscenesVV
+  .filterDate(year + '-06-01',year + '-06-10');  
+var VV_07_1= relevantscenesVV
+  .filterDate(year + '-07-01',year + '-07-10');  
+var VV_07_2= relevantscenesVV
+  .filterDate(year + '-07-11',year + '-07-20');
+
+
+//Mean values in time slots
+
+var VH_04_2_Mean = VH_04_2.mean();
+var VH_04_3_Mean = VH_04_3.mean();
+var VH_06_1_Mean = VH_06_1.mean();
+var VH_06_2_Mean = VH_06_2.mean();
+var VH_07_1_Mean = VH_07_1.mean();
+var VH_07_3_Mean = VH_07_3.mean();
+var VH_08_1_Mean = VH_08_1.mean();
+var VH_09_3_Mean = VH_09_3.mean();
+
+var VV_04_1_Mean = VV_04_1.mean();
+var VV_04_2_Mean = VV_04_2.mean();
+var VV_04_3_Mean = VV_04_3.mean();
+var VV_05_1_Mean = VV_05_1.mean();
+var VV_05_2_Mean = VV_05_2.mean();
+var VV_06_1_Mean = VV_06_1.mean();
+var VV_07_1_Mean = VV_07_1.mean();
+var VV_07_2_Mean = VV_07_2.mean();
+
+
+//Mean of differences
+
+var difVH_04_3_06_2 = VH_06_2_Mean.subtract(VH_04_3_Mean);
+var difVH_04_3_07_1 = VH_07_1_Mean.subtract(VH_04_3_Mean);
+var difVH_04_2_06_1 = VH_06_1_Mean.subtract(VH_04_2_Mean);
+var difVH_04_2_07_1 = VH_07_1_Mean.subtract(VH_04_2_Mean);
+var difVH_04_3_06_1 = VH_06_1_Mean.subtract(VH_04_3_Mean);
+var difVH_06_1_08_1 = VH_08_1_Mean.subtract(VH_06_1_Mean);
+var difVH_06_2_07_3 = VH_07_3_Mean.subtract(VH_06_2_Mean);
+var difVH_07_1_09_3 = VH_09_3_Mean.subtract(VH_07_1_Mean);
+
+var difVV_04_3_07_1 = VV_07_1_Mean.subtract(VV_04_3_Mean);
+var difVV_04_2_06_1 = VV_06_1_Mean.subtract(VV_04_2_Mean);
+var difVV_04_1_06_1 = VV_06_1_Mean.subtract(VV_04_1_Mean);
+var difVV_04_3_06_1 = VV_06_1_Mean.subtract(VV_04_3_Mean);
+var difVV_05_1_06_1 = VV_06_1_Mean.subtract(VV_05_1_Mean);
+var difVV_05_1_07_2 = VV_07_2_Mean.subtract(VV_05_1_Mean); 
+var difVV_05_2_07_2 = VV_07_2_Mean.subtract(VV_05_2_Mean);
+
+
+// Smoothing of means
+
+var smooth_VH_04_3 = VH_04_3_Mean.convolve(boxcar);
+var smooth_VH_06_2 = VH_06_2_Mean.convolve(boxcar);
+
+
+//Smoothing of differences
+
+var smooth_difVH_04_3_06_2 = difVH_04_3_06_2.convolve(boxcar);
+var smooth_difVH_04_3_07_1 = difVH_04_3_07_1.convolve(boxcar);
+var smooth_difVH_04_2_06_1 = difVH_04_2_06_1.convolve(boxcar);
+var smooth_difVH_04_2_07_1 = difVH_04_2_07_1.convolve(boxcar);
+var smooth_difVH_04_3_06_1 = difVH_04_3_06_1.convolve(boxcar);
+var smooth_difVH_06_1_08_1 = difVH_06_1_08_1.convolve(boxcar); 
+var smooth_difVH_06_2_07_3 = difVH_06_2_07_3.convolve(boxcar);
+var smooth_difVH_07_1_09_3 = difVH_07_1_09_3.convolve(boxcar);
+
+var smooth_difVV_04_3_07_1 = difVV_04_3_07_1.convolve(boxcar);
+var smooth_difVV_04_2_06_1 = difVV_04_2_06_1.convolve(boxcar);
+var smooth_difVV_04_1_06_1 = difVV_04_1_06_1.convolve(boxcar);
+var smooth_difVV_04_3_06_1 = difVV_04_3_06_1.convolve(boxcar);
+var smooth_difVV_05_1_06_1 = difVV_05_1_06_1.convolve(boxcar);
+var smooth_difVV_05_1_07_2 = difVV_05_1_07_2.convolve(boxcar); 
+var smooth_difVV_05_2_07_2 = difVV_05_2_07_2.convolve(boxcar);
+
+
+
+//----------------------------Classification--------------------------------------
+
+//Conditions for rapeseed
+
+var rape_VH_04_3 = smooth_VH_04_3.expression(
+  'db <=-13.5 && db >= -18.5', {
+  'db': smooth_VH_04_3});
+
+var rape_VH_06_2 = smooth_VH_06_2.expression(
+  'db <=-9.5 && db >= -14.5', {
+  'db': smooth_VH_06_2});
+
+var rapeDifVH = smooth_difVH_04_3_06_2.expression(
+  'difVH >=2.5 && difVH <= 10', {
+  'difVH': smooth_difVH_04_3_06_2});
+
+var rape = rapeDifVH.expression(
+  'rapeDifVH == 1 && rape_VH_04_3 == 1 && rape_VH_06_2 == 1', { 
+    'rapeDifVH': rapeDifVH,
+    'rape_VH_04_3': rape_VH_04_3,
+    'rape_VH_06_2': rape_VH_06_2}); 
+
+
+
+//Conditions for sugarbeet and potato
+
+var potsug1 = smooth_difVH_04_3_06_1.expression(
+  'smooth_difVH_04_3_06_1 >= 6 ' , {
+  'smooth_difVH_04_3_06_1': smooth_difVH_04_3_06_1
+  });
+  
+var potsug2 = smooth_difVH_06_1_08_1.expression(
+  'smooth_difVH_06_1_08_1 > -5 ' , {
+  'smooth_difVH_06_1_08_1': smooth_difVH_06_1_08_1
+  });  
+  
+var potsug3 = smooth_difVH_06_2_07_3.expression(
+  'smooth_difVH_06_2_07_3 > -3', {
+  'smooth_difVH_06_2_07_3': smooth_difVH_06_2_07_3
+  });	
+  
+
+var potsug = smooth_difVH_06_1_08_1.expression(
+  'potsug1 == 1 && potsug2 == 1 && potsug3 == 1 && rape == 0' , {
+  'potsug1': potsug1,
+  'potsug3': potsug3,
+  'rape': rape,
+  'potsug2': potsug2
+  });  
+
+
+
+//Sugarbeet
+
+var sugarVH = smooth_difVH_07_1_09_3.expression(      //oder 06_1-09_3??
+  'smooth_difVH_07_1_09_3 >= -1 && potsug == 1' , {
+  'smooth_difVH_07_1_09_3': smooth_difVH_07_1_09_3,
+  'potsug': potsug
+  });
+  
+var sugar = sugarVH;  
+
+
+//Potato
+
+var potato = smooth_difVH_04_3_07_1.expression(
+  'potsug == 1 && sugar == 0', {
+  'sugar': sugar,
+  'potsug': potsug
+  });
+
+
+
+//Conditions for summerbarley
+
+var summerbarleyVV = smooth_difVV_04_1_06_1.expression(
+  'difVV <=-1.5 && difVV >= -15', {
+  'difVV': smooth_difVV_04_1_06_1});
+
+var  summerbarleyDifVH1 = smooth_difVH_04_2_06_1.expression(
+  'smooth_difVH_04_2_06_1 >= 0.5', {
+  'smooth_difVH_04_2_06_1': smooth_difVH_04_2_06_1  
+  });
+
+var summerbarleyDifVH2 = smooth_difVH_04_2_07_1.expression(
+  'smooth_difVH_04_2_07_1 >= 2', {
+  'smooth_difVH_04_2_07_1': smooth_difVH_04_2_07_1  
+  });
+
+var summerbarleyVH = smooth_difVH_04_2_06_1.expression(
+  'summerbarleyDifVH1 == 1 && summerbarleyDifVH2 == 1', { 
+    'summerbarleyDifVH1': summerbarleyDifVH1,
+    'summerbarleyDifVH2': summerbarleyDifVH2}); 
+
+  
+var summerbarley = smooth_difVH_04_2_06_1.expression(
+  'summerbarleyVH == 1 && summerbarleyVV == 1 && rape == 0 && potsug == 0', { 
+    'summerbarleyVH': summerbarleyVH,
+    'rape': rape,
+    'potsug': potsug,
+    'summerbarleyVV': summerbarleyVV
+    
+  });       
+
+
+//Conditions for maize
+
+var maize_VH_04_2_07_1 = smooth_difVH_04_3_07_1.expression(
+  'smooth_difVH_04_3_07_1 >= 3 && smooth_difVV_04_3_07_1 < 4', {
+  'smooth_difVH_04_3_07_1': smooth_difVH_04_3_07_1,
+  'smooth_difVV_04_3_07_1': smooth_difVV_04_3_07_1
+  }); 
+  
+
+var maize = smooth_difVH_04_3_06_1.expression(
+  'maize_VH_04_2_07_1 == 1  && potsug == 0 && rape == 0 && summerbarley == 0' , {
+ 'maize_VH_04_2_07_1': maize_VH_04_2_07_1,
+ 'potsug': potsug,
+ 'summerbarley': summerbarley,
+ 'rape': rape
+  });  
+
+  
+
+
+//Conditions for winterwheat
+
+var summer = smooth_difVV_05_1_06_1.expression(
+  'maize == 1 || potato == 1 || sugar == 1 ', {
+  'sugar': sugar,
+  'potato': potato,
+  'maize': maize 
+  }); 
+
+
+//Winterbarley
+
+var wintercereal5161 = smooth_difVV_05_1_06_1.expression(
+  'smooth_difVV_05_1_06_1 > 4.5 || smooth_difVV_04_3_06_1 > 4.5', {
+  'smooth_difVV_05_1_06_1': smooth_difVV_05_1_06_1,
+  'smooth_difVV_04_3_06_1': smooth_difVV_04_3_06_1});	
+
+var wintercereal6193 = smooth_difVH_06_2_07_3.expression(
+  'smooth_difVH_06_2_07_3 < -3', {
+  'smooth_difVH_06_2_07_3': smooth_difVH_06_2_07_3
+  });	
+
+
+var winterbarley = smooth_difVH_06_2_07_3.expression(
+  'wintercereal5161 == 1 && wintercereal6193 == 1 && rape == 0 && summer == 0 && summerbarley == 0', { 
+    'wintercereal5161': wintercereal5161,
+    'rape': rape,
+    'summer': summer,
+    'summerbarley': summerbarley,
+    'wintercereal6193': wintercereal6193
+  });
+
+
+//Rye and Wheat
+
+var wintercereal5172 = smooth_difVV_05_1_07_2.expression(
+  'smooth_difVV_05_1_07_2 > 2 || smooth_difVV_05_2_07_2 > 2', {
+  'smooth_difVV_05_1_07_2': smooth_difVV_05_1_07_2,
+  'smooth_difVV_05_2_07_2': smooth_difVV_05_2_07_2});	
+
+
+var ryewheat = smooth_difVV_05_1_06_1.expression(
+  'summer == 0 && wintercereal5172 == 1 && winterbarley == 0 && rape == 0 && summerbarley == 0', { 
+    'summer': summer,
+    'rape': rape,
+    'summerbarley': summerbarley,
+    'winterbarley': winterbarley,
+    'wintercereal5172': wintercereal5172});
+
+
+
+//Reclassification
+
+var reclassRape = reclassify(rape, 4).rename('rape');
+var reclassPotato = reclassify(potato, 9).rename('potato');
+var reclassMaize = reclassify(maize, 10).rename('maize');
+var reclassSugar = reclassify(sugar, 11).rename('sugar');
+var reclassRyewheat = reclassify(ryewheat, 12).rename('ryewheat');
+var reclassWinterbarley = reclassify(winterbarley, 13).rename('winterbarley');
+var reclassSummerbarley = reclassify(summerbarley, 22).rename('summerbarley');
+
+
+//Masks
+
+var maskeddifRape = reclassRape.updateMask(rape);
+var maskeddifSugar = reclassSugar.updateMask(sugar);
+var maskeddifPotato = reclassPotato.updateMask(potato);
+var maskeddifMaize = reclassMaize.updateMask(maize);
+var maskeddifSummerbarley = reclassSummerbarley.updateMask(summerbarley);
+var maskeddifWinterbarley = reclassWinterbarley.updateMask(winterbarley);
+var maskeddifRyewheat = reclassRyewheat.updateMask(ryewheat);
+
+//Merging & Visualization
+
+var classcollection = ee.ImageCollection([reclassRape, reclassPotato, reclassMaize, reclassSugar, 
+reclassRyewheat, reclassWinterbarley, reclassSummerbarley]);
+
+var classifiedbands = classcollection.toBands();
+print(classifiedbands, 'classifiedbands');
+
+var classifiedimage = classifiedbands.reduce(ee.Reducer.max());
+print(classifiedimage, 'classifiedimage');
+
+var sld_intervals =
+'<RasterSymbolizer>' +
+ ' <ColorMap  type="intervals" extended="false" >' +
+    '<ColorMapEntry color="#FFFFFF" quantity="0" label="Nodata"/>' +
+    '<ColorMapEntry color="#ff5cda" quantity="4" label="rape"/>' +
+    '<ColorMapEntry color="#ad6d11" quantity="9" label="potato"/>' +
+    '<ColorMapEntry color="#ff2c2c" quantity="10" label="maize"/>' + 
+    '<ColorMapEntry color="#780043" quantity="11" label="sugar"/>' +
+    '<ColorMapEntry color="#ffe400" quantity="12" label="ryewheat"/>' +
+    '<ColorMapEntry color="#ffe098" quantity="13" label="winterbarley"/>' +
+    '<ColorMapEntry color="#ff9700" quantity="22" label="summerbarley"/>' +
+    '</ColorMap>' +
+'</RasterSymbolizer>';
+
+classifiedimage = classifiedimage.updateMask(classifiedimage).clip(ug);
+
+
+//Mapping
+
+//Background
+
+var background = gesamtVHMean;
+Map.addLayer(background.clip(ug),  {min: -25, max: -5}, 'background', false);
+
+Map.addLayer(classifiedimage.sldStyle(sld_intervals), {}, 'IGBP classification styled', true);
+
+
+Map.centerObject(ug, 13);
+
+
+//Export Classification
+Export.image.toDrive({
+  image: classifiedimage,
+  description: 'classifiedimage',
+  scale: 10,
+  region: ug,
+  crs: 'EPSG:32632'
+});
+}
+
+
+
+var resultprintlabel = ui.Label('Your classification for the year ' + year + ' has been generated in ' + studyarea +'\n' + smoothset + '\nTo export the classification go to "Tasks" and choose "RUN".');
+    print(resultprintlabel);
+
+    });
+    
+print(buttonStart);
+  
+  
+ 
