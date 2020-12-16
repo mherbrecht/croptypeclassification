@@ -1,7 +1,5 @@
 # croptypeclassification
 
-# croptypeclassification
-
 The code published here was written as part of my master's thesis, which deals with crop classification from multitemporal radar imagery from the Sentinel-1 satellite without training data in the cloud (Google Earth Engine).
 
 Satellite-based remote sensing is an effective and inexpensive tool for monitoring and mapping large areas. Due to the high annual dynamics of agricultural land, very high temporal resolution of data is required. This is provided by synthetic aperture radar (SAR) sensors such as Sentinel-1, which operate independently of cloud cover. Most approaches use mapped training datasets for supervised classifications of crop species. However, the required mapping campaigns are costly and time consuming. Therefore, a work process without training data would be a significant improvement.
